@@ -1,0 +1,279 @@
+type User @secret(field: "pwd") @auth(
+  add: {rule:"{$ROLE: { eq: \"ADMIN\" } }"}
+  update: {rule:"{$ROLE: { eq: \"ADMIN\" } }"}
+  delete: {rule:"{$ROLE: { eq: \"ADMIN\" } }"}
+) {
+  username: String! @id
+  isTeacher: Teacher @hasInverse(field: isUser)
+  isStudent: Student @hasInverse(field: isUser)
+  isAdmin: Boolean @search
+  sentMessage: [Message] @hasInverse(field: fromUser)
+  receivedMessage: [Message] @hasInverse(field: toUser)
+  commented: [Comment] @hasInverse(field: author)
+}
+
+type Teacher @auth(
+  add: {rule:"{$ROLE: { eq: \"ADMIN\" } }"}
+  update: {rule:"{$ROLE: { eq: \"ADMIN\" } }"}
+  delete: {rule:"{$ROLE: { eq: \"ADMIN\" } }"}
+) {
+  id: ID!
+  name: String!
+  online: Boolean @search
+  teaches:[Class] @hasInverse(field: teachers)
+  isUser: User!
+  comments: [Comment] @hasInverse(field: onTeacher)
+  graded: [Grade] @hasInverse(field: byTeacher)
+}
+
+type Class @auth(
+  query: {or:[
+    {rule:"{$ROLE: { eq: \"ADMIN\" } }"}
+    {rule:"query ($USERNAME: String!) { queryClass { teachers { isUser(filter:{username:{eq:$USERNAME}}) { username } } } }"}
+    {rule:"query ($USERNAME: String!) { queryClass { students { isUser(filter:{username:{eq:$USERNAME}}) { username } } } }"}
+  ]}
+  add: {rule:"{$ROLE: { eq: \"ADMIN\" } }"}
+  update: {or:[
+	{rule:"{$ROLE: { eq: \"ADMIN\" } }"}
+    {rule:"query ($USERNAME: String!) { queryClass { teachers { isUser(filter:{username:{eq:$USERNAME}}) { username } } } }"}
+  ]}
+  delete: {rule:"{$ROLE: { eq: \"ADMIN\" } }"}
+) {
+  id: ID!
+  name: String!
+  teachers: [Teacher]
+  students: [Student]
+  assignments: [Assignment] @hasInverse(field: forClass)
+  meets: [Schedule] @hasInverse(field: forClass)
+  sessions: [Session] @hasInverse(field: forClass)
+  comments: [Comment] @hasInverse(field: onClass)
+  grades: [Grade] @hasInverse(field: inClass)
+  finalGrades: [Grade]
+}
+
+type Grade {
+  id: ID!
+  forStudent: Student!
+  inClass: Class!
+  byTeacher: Teacher!
+  forAssignment: Assignment
+  type: GradeType
+  from: [Scored] @hasInverse(field: forGrade)
+  finalizedScore: Float @search
+}
+
+type ClassGrade {
+  id: ID!
+  finalized: DateTime! @search
+  ofClass: Class!
+  byTeacher: Teacher!
+  forStudent: Student!
+  score: Float! @search
+}
+
+type Schedule {
+  id: ID!
+  forClass: Class!
+  onDay: Day!
+  start: String!
+  end: String!
+  sessions: [Session] @hasInverse(field: onSchedule)
+  comments: [Comment] @hasInverse(field: onSchedule)
+}
+
+type Session {
+  id: ID!
+  forClass: Class!
+  onSchedule: Schedule!
+  initiated: DateTime!
+  attendees: [Attendance] @hasInverse(field: forSession)
+  comments: [Comment] @hasInverse(field: onSession)
+}
+
+type Attendance {
+  id: ID!
+  forSession: Session!
+  ofStudent: Student!
+  onSchedule: Schedule!
+  present: Boolean! @search
+  excused: Boolean @search
+  comments: [Comment] @hasInverse(field: onAttendance)
+}
+    
+enum Day {
+  Sunday
+  Monday
+  Tuesday
+  Wednesday
+  Thursday
+  Friday
+  Saturday
+}
+
+type Assignment {
+  id: ID!
+  name: String!
+  due: DateTime
+  forClass: Class!
+  byTeacher: Teacher!
+  assignedTo: [Student] @hasInverse(field: assignments)
+  hasProgress: [AssignmentProgress] @hasInverse(field: ofAssignment)
+  comments: [Comment] @hasInverse(field: onAssignment)
+  grades: [Grade] @hasInverse(field: forAssignment)
+}
+
+type AssignmentProgress {
+  id: ID!
+  ofAssignment: Assignment!
+  byStudent: Student!
+  comments: [Comment] @hasInverse(field: onAssignmentProgress)
+}
+
+type Comment {
+  id: ID!
+  isPublic: Boolean @search
+  author: User!
+  date: DateTime! @search
+  readBy: [User]
+  replies: [Comment]
+  inReplyTo: Comment @hasInverse(field: replies)
+  onAssignmentProgress: AssignmentProgress
+  onTeacher: Teacher
+  onStudent: Student
+  onClass: Class
+  onAssignment: Assignment
+  onSchedule: Schedule
+  onSession: Session
+  onAttendance: Attendance
+  onScored: Scored
+  onAnswered: Answered
+  onQuiz: Quiz
+  onQuestion: Question
+  onAnswer: Answer
+}
+
+type Message {
+  id: ID!
+  toUser: User
+  fromUser: User
+  sent: DateTime!
+  read: DateTime
+}
+
+type Student @auth(
+  query: { or: [
+    {rule:"{$ROLE: { eq: \"STUDENT\" } }"}
+    {rule:"{$ROLE: { eq: \"TEACHER\" } }"}
+    {rule:"{$ROLE: { eq: \"ADMIN\" } }"}
+  ]}
+  add: { or: [
+    {rule:"{$ROLE: { eq: \"TEACHER\" } }"}
+    {rule:"{$ROLE: { eq: \"ADMIN\" } }"}
+  ]}
+  update: { or: [
+    {rule:"{$ROLE: { eq: \"TEACHER\" } }"}
+    {rule:"{$ROLE: { eq: \"ADMIN\" } }"}
+  ]}
+  delete: {rule:"{$ROLE: { eq: \"ADMIN\" } }"}
+) {
+  id: ID!
+  isUser: User!
+  online: Boolean @search
+  name: String!
+  grade: String
+  dob: DateTime
+  classes: [Class] @hasInverse(field: students)
+  assignments: [Assignment]
+  hasAssignmentProgress: [AssignmentProgress] @hasInverse(field: byStudent)
+  hasAnswered: [Answered] @hasInverse(field: byStudent)
+}
+
+type Scored {
+  id: ID!
+  answer: Answered!
+  forGrade: Grade!
+  isCorrect: Boolean @search
+  value: Float @search
+  comments: [Comment] @hasInverse(field: onScored)
+}
+
+type Answered {
+  id: ID!
+  date: DateTime!
+  byStudent: Student!
+  onQuiz: Quiz
+  forQuestion: Question!
+  asAnswer: Answer! @hasInverse(field: usedIn)
+  score: Scored
+  inChallenge: Challenge @hasInverse(field: answers)
+  comments: [Comment] @hasInverse(field: onAnswered)
+}
+
+type GradeType {
+  id: ID!
+  name: String! @search(by: [hash,regexp])
+  usedIn: [Grade] @hasInverse(field: type)
+  weight: Float
+}
+
+type Quiz {
+  id: ID!
+  questions: [Question]
+  type: GradeType
+  answers: [Answered] @hasInverse(field: onQuiz)
+  comments: [Comment] @hasInverse(field: onQuiz)
+}
+
+enum QuestionType {
+  "Fill in the Blank"
+  Blank
+  "Multiple Choise"
+  Choice
+  "Short Essay < 100 words"
+  ShortEssay
+  "Essay 100-500 words"
+  Essay
+  "Long Essay > 500 words"
+  LongEssay
+  "Report"
+  Report
+}
+
+type Question {
+  id: ID!
+  asked: DateTime
+  type: QuestionType!
+  name: String!
+  options: [Answer]
+  inChallenge: [Challenge] @hasInverse(field: question)
+  "The point value this question is worth. Leave empty for auto averaging"
+  points: Float
+  "The percentage weight of this question. Leave empty for auto averaging."
+  weight: Float
+  answer: Answer
+  answered: [Answered] @hasInverse(field: forQuestion)
+  comments: [Comment] @hasInverse(field: onQuestion)
+}
+
+type Answer {
+  id: ID!
+  name: Answer
+  usedIn: Answered
+  comments: [Comment] @hasInverse(field: onAnswer)
+}
+
+type Game {
+  id: ID!
+  name: String!
+  questions: [Question]
+  challenges: [Challenge] @hasInverse(field: forGame)
+}
+
+type Challenge {
+  id: ID!
+  forGame: Game!
+  question: Question!
+  teacher: Teacher
+  participants: [Student]
+  answers: [Answered]
+}
